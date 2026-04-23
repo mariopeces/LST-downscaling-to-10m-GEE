@@ -18,6 +18,7 @@ LANDSAT_COLLECTIONS = (
     "LANDSAT/LC09/C02/T1_L2",
 )
 SENTINEL_COLLECTION = "COPERNICUS/S2_SR_HARMONIZED"
+PIPELINE_MODES = ("original_like", "operational")
 
 
 @dataclass(frozen=True)
@@ -102,6 +103,22 @@ def _mask_sentinel(image: ee.Image) -> ee.Image:
         .And(scl.neq(11))
     )
     return image.updateMask(cloud_mask.And(scl_mask)).divide(10000)
+
+
+def _prepare_landsat_image(image: ee.Image, *, mode: str) -> ee.Image:
+    if mode == "original_like":
+        return _apply_landsat_scale_factors(image)
+    if mode == "operational":
+        return _apply_landsat_scale_factors(_mask_landsat(image))
+    raise ValueError(f"Modo no soportado: {mode}")
+
+
+def _prepare_sentinel_image(image: ee.Image, *, mode: str) -> ee.Image:
+    if mode == "original_like":
+        return image.divide(10000)
+    if mode == "operational":
+        return _mask_sentinel(image)
+    raise ValueError(f"Modo no soportado: {mode}")
 
 
 def _landsat_collection(
@@ -289,14 +306,14 @@ def _get_landsat_image(pair: ScenePair) -> ee.Image:
     return ee.Image(pair.landsat_asset_id)
 
 
-def _get_sentinel_image(pair: ScenePair, aoi_geometry: ee.Geometry) -> ee.Image:
+def _get_sentinel_image(pair: ScenePair, aoi_geometry: ee.Geometry, *, mode: str) -> ee.Image:
     collection = (
         ee.ImageCollection(SENTINEL_COLLECTION)
         .filterBounds(aoi_geometry)
         .filter(
             ee.Filter.inList("system:index", ee.List(list(pair.sentinel_system_indices)))
         )
-        .map(_mask_sentinel)
+        .map(lambda image: _prepare_sentinel_image(image, mode=mode))
     )
     return collection.median().clip(aoi_geometry)
 
@@ -326,9 +343,10 @@ def build_downscaled_pair_image(
     *,
     pair: ScenePair,
     aoi_geometry: ee.Geometry,
+    mode: str,
 ) -> tuple[ee.Image, ee.Image, dict[str, Any]]:
-    landsat_image = _apply_landsat_scale_factors(_mask_landsat(_get_landsat_image(pair))).clip(aoi_geometry)
-    sentinel_image = _get_sentinel_image(pair, aoi_geometry)
+    landsat_image = _prepare_landsat_image(_get_landsat_image(pair), mode=mode).clip(aoi_geometry)
+    sentinel_image = _get_sentinel_image(pair, aoi_geometry, mode=mode)
 
     landsat_lst = landsat_image.select("ST_B10").rename("L8_LST_30m")
     landsat_indices = _landsat_indices(landsat_image)
@@ -354,7 +372,13 @@ def build_downscaled_pair_image(
         scale=30,
         maxPixels=1_000_000_000_000,
     )
-    coefficients = ee.Array(regression.get("coefficients")).getInfo()
+    coefficients_obj = regression.get("coefficients")
+    if coefficients_obj is None:
+        raise RuntimeError(
+            f"No hay coeficientes de regresion para la escena {pair.landsat_product_id}."
+        )
+
+    coefficients = ee.Array(coefficients_obj).getInfo()
     if not coefficients or len(coefficients) != 4:
         raise RuntimeError(
             f"No se han podido calcular coeficientes para la escena {pair.landsat_product_id}."
@@ -444,9 +468,13 @@ def run_pipeline(
     max_cloud_cover: float,
     max_pair_gap_days: int,
     scale_m: float,
+    mode: str,
     ee_project: str | None,
     max_scenes: int | None,
 ) -> dict[str, object]:
+    if mode not in PIPELINE_MODES:
+        raise ValueError(f"Modo no soportado: {mode}")
+
     aoi = read_aoi(aoi_path)
     initialize_earth_engine(project=ee_project)
 
@@ -468,17 +496,33 @@ def run_pipeline(
     pair_images: list[ee.Image] = []
     landsat_lst_images: list[ee.Image] = []
     pair_metadata: list[dict[str, Any]] = []
+    skipped_pairs: list[dict[str, str]] = []
     for pair in scene_pairs:
-        image, landsat_lst_image, metadata = build_downscaled_pair_image(
-            pair=pair,
-            aoi_geometry=aoi_geometry,
-        )
+        try:
+            image, landsat_lst_image, metadata = build_downscaled_pair_image(
+                pair=pair,
+                aoi_geometry=aoi_geometry,
+                mode=mode,
+            )
+        except Exception as exc:
+            skipped_pairs.append(
+                {
+                    "landsat_product_id": pair.landsat_product_id,
+                    "landsat_acquired_on": pair.landsat_acquired_on,
+                    "sentinel_acquired_on": pair.sentinel_acquired_on,
+                    "reason": str(exc),
+                }
+            )
+            continue
+
         pair_images.append(image)
         landsat_lst_images.append(landsat_lst_image)
         pair_metadata.append(metadata)
 
     if not pair_images or not landsat_lst_images:
-        raise RuntimeError("No se ha podido generar ninguna imagen downscaled valida.")
+        raise RuntimeError(
+            "No se ha podido generar ninguna imagen downscaled valida tras filtrar escenas problematicas."
+        )
 
     aggregated = ee.ImageCollection(pair_images).mean().rename("LST_MEAN").clip(aoi_geometry).toFloat()
     aggregated_landsat_lst = (
@@ -507,15 +551,20 @@ def run_pipeline(
 
     scene_pairs_path = output_path / "scene_pairs.json"
     scene_pairs_path.write_text(json.dumps(pair_metadata, indent=2), encoding="utf-8")
+    skipped_pairs_path = output_path / "skipped_scene_pairs.json"
+    skipped_pairs_path.write_text(json.dumps(skipped_pairs, indent=2), encoding="utf-8")
 
     summary = {
         "aoi": str(Path(aoi_path).resolve()),
         "scene_count": len(pair_metadata),
+        "skipped_scene_count": len(skipped_pairs),
         "scene_pairs": str(scene_pairs_path.resolve()),
+        "skipped_scene_pairs": str(skipped_pairs_path.resolve()),
         "aggregated_lst": str(aggregated_path.resolve()),
         "aggregated_landsat_lst": str(aggregated_landsat_path.resolve()),
         "output_crs": output_crs.to_string(),
         "scale_m": scale_m,
+        "mode": mode,
     }
     (output_path / "pipeline_outputs.json").write_text(
         json.dumps(summary, indent=2), encoding="utf-8"

@@ -105,6 +105,8 @@ Useful options:
 
 - `--ee-project <project-id>` to initialize Earth Engine with an explicit project
 - `--max-scenes 3` to do a short test run
+- `--mode original_like` to mimic the original JavaScript app more closely
+- `--mode operational` to apply stricter QA masks per pixel
 
 ## Notes on scene selection
 

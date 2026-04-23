@@ -61,6 +61,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Resolucion final de salida en metros. Por defecto: 10",
     )
     parser.add_argument(
+        "--mode",
+        choices=["original_like", "operational"],
+        default="original_like",
+        help=(
+            "Modo de downscaling. 'original_like' replica mas fielmente el script JS original; "
+            "'operational' aplica mascaras QA por pixel. Por defecto: original_like"
+        ),
+    )
+    parser.add_argument(
         "--ee-project",
         default=None,
         help="Proyecto de Google Cloud para inicializar Earth Engine. Si se omite, se usa el entorno activo.",
@@ -100,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
         max_cloud_cover=args.max_cloud_cover,
         max_pair_gap_days=args.max_pair_gap_days,
         scale_m=args.scale_m,
+        mode=args.mode,
         ee_project=args.ee_project,
         max_scenes=args.max_scenes,
     )
@@ -107,4 +117,3 @@ def main(argv: list[str] | None = None) -> int:
     for key, value in outputs.items():
         print(f"{key}: {value}")
     return 0
-
