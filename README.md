@@ -1,45 +1,158 @@
-# Landsat-8 Land Surface Temperature downscaling using Sentinel-2 in Google Earth Engine
-A Google Earth Engne tool to downscale Landsat Land Surface Temperature data to 10 m resolution using Sentinel-2 data. 
-This code repository is an attachment for the article in Remote Sensing: Onačillová, K.; Gallay, M.; Paluba, D.; Péliová, A.; Tokarčík, O.; Laubertová, D. Combining Landsat 8 and Sentinel-2 Data in Google Earth Engine to Derive Higher Resolution Land Surface Temperature Maps in Urban Environment. Remote Sens. 2022, 14, 4076. [https://doi.org/10.3390/rs14164076](https://www.mdpi.com/2072-4292/14/16/4076/htm). 
+# LST Downscaling to 10 m in Google Earth Engine
 
-</b> This repository contains a folder "javascript_codes" where you can find:
-  - A JavaScript Google Earth Engine (GEE) code "LST_downscaling_GEE_APP.js" used in the [LST-downscaling GEE Application](https://danielp.users.earthengine.app/view/lst-downscaling) to downscale (sharpen) the Land Surface Temperature (LST) derived from Landsat thermal sensing using the spectral bands of Sentinel-2 
-  
-   ## How to use the [LST-downscaling GEE Application](https://danielp.users.earthengine.app/view/lst-downscaling)
-1. Define the 5 input parameters: 
-    - start and end date (to select the desired time frame), 
-    - Landsat collection (to select whether to use the Landsat 8 or Landsat 9 image collection), 
-    - maximum cloud cover allowed for the image tiles and 
-    - the region of interest (ROI). 
-      - <sub>The default ROI set-ting is focused on Košice City. However, the user can change the location where the analysis will be performed. The ROI is created using the Geometry Tools in the GEE, which allow users to move or delete and then delineate their own new geometric fea-tures, such as polygons, to be applied in the analyses. </sub>
+This repository now contains two things:
 
-2. Click on **“Generate Landsat 8/9 and Sentinel-2 Image Collections”** button to generate available image IDs. 
-    - Based on this information, the list of Landsat 8/9 and Sentinel-2 imagery IDs that meet the entry criteria will be displayed under the button in the right panel. 
-    - The user will recieve a list of Landsat 8/9 and Sentinel-2 Image IDs that meet the selected criteria.
-3. Enter Image IDs for the Landsat and for the Sentinel-2 Collection. 
-    - The user can select two image IDs from the resulting list – one ID for the Landsat 8/9 collection and one for the Sentinel-2 collection and enter their exact ID to the newly displayed text fields. Several Landsat 8/9 and Sentinel-2 imagery may be available in a given time window, therefore we recommend selecting data sets that were acquired on the same day. If images for Landsat 8/9 and Sentinel-2 collections are not available on the same acquisition day, we recommend choosing the datasets by the closest acquisition time to account for similar spectral characteristics of the derived spectral indices from both satellites. 
-4. Click on **"Generate Downscaled LST"** button to perform the Landsat 8/9 LST Downscaling to 10 m spatial resolution.
-**Note:** All input parameters, including image IDs, are pre-filled with parameters required to perform analysis showed in this paper. Without modifying the input parameters, the user gets the (slightly different) results produced in this article.
-    - Tthe following 5 images: Landsat 8/9 and Sentinel-2 natural color images (RGB), original Landsat 8/9 LST in 30 m, downscaled LST to 10 m spatial resolution with and without assuming residuals are added to the Map.
-5. (Optional) Click on **"Generate charts of spectral indices vs Landsat LST"** to generate scatterplots of correlation between Landsat 8/9 NDVI, NDWI and NDBI spectral indices and Landsat 8/9 LST bands.
+1. The original JavaScript Google Earth Engine app in `javascript_codes/LST-downscaling_GEE_APP.js` as methodological reference.
+2. A new AOI-driven Python pipeline that follows the same operational pattern as `wind_calculator`:
+   - AOI stored locally in `data/aoi`
+   - execution by CLI
+   - deterministic outputs in `outputs/<municipality>`
 
-### Final LST product download option
-To download the downscaled LST images use the [GEE Code Editor version](https://code.earthengine.google.com/005680c8acf54715c9b10e946400d842) or directly the code provided in the "LST_downscaling_GEE_APP.js" code in the "javascript_codes" folder.
+The new pipeline is oriented to municipal urban heat island mapping using:
 
-## Outputs of the algorithm
-There are three different output types of the algorithm: (1) the main output is the downscaled LST 10 m with residuals, (2) bivariate scatter plots of LSTL8 vs. NDVIL8, NDBIL8, NDWIL8, (3) downscaling regression model. In the GEE code, the user will obtain the following outputs:
-  - LST 10 m with residuals - final downscaled LST with regression residuals in 10 m spatial resolution
-  - LST 10 m (no residuals) - downscaled LST in 10 m spatial resolution (without added regression residuals)
-  - Landsat 8/9 LST – Landsat 8 Land Surface Temperature in 30 m spatial resolution
-  - Landsat 8/9 LST regression residuals – regression residuals of LST computed as the difference between model estimation and the corresponding observation by Landsat 8/9 at 30 m resolution 
-  - Sentinel-2 RGB – true color composite for Sentinel-2
-  - Landsat 8/9 RGB –  true color composite for Landsat 8/9
+- Landsat 8/9 Collection 2 Level-2 `ST_B10` as the base LST source
+- Sentinel-2 SR Harmonized for high-resolution predictors
+- linear regression plus residual smoothing, following the logic already used in the original GEE script
+- temporal aggregation of all valid summer pairs into a final mean LST raster
 
+## What the pipeline produces
 
-  ## About the Landsat-8 Land Surface Temperature downscaling using Sentinel-2 in GEE
-  This algorithm aims to downscale the coarse spatial resolution (100/30 m) Landsat 8/9 LST to finer spatial resolution (10 m) for more accurate mapping of LST. Three different indices, namely the normalized difference vegetation index (NDVI), built-up index (NDBI), and water index (NDWI) were used for disaggregation of Landsat LST (100/30 m) to 10 m Sentinel-2 spatial resolution using linear regression. The algorithm was developed in the cloud-based platform Google Earth Engine (GEE) using Landsat-8 and Sentinel-2 open access data. We conclude that the proposed downscaling model, by addressing the linear relationship of LST at coarse and fine spatial resolutions, can be successfully applied to produce high-resolution LST maps suitable for studies of the urban thermal environment at local scales. The performance was validated by the adjusted R2 returned at the stage of model development as well as by the validation of downscaled LST results using data logger measurements at 6 sites in the Košice city, Slovakia, to represent different types of land cover.
-  
-  ## A brief description of the methodology:
-  Based on the input parameters, the respective images of Landsat Surface Reflectance (SR) Collection 2 and Sentinel-2 Level 2A (L2A) collections are used to NDVI, NDBI, and NDWI spectral indices for Landsat 8/9 (NDVIL8, NDBIL8, NDWIL8) in 30 m resolution and for Sentinel-2 in a 10 m resolution, respectively. 
-</b>The LST is then calculated at a 30 m resolution using the Landsat 8/9 thermal band (B10) converted to brightness temperature in degrees Celsius (LSTL8). Then, the linear regression model between LSTL8 and the spectral indices NDVIL8, NDBIL8, NDWIL8 is used to calculate regression coefficients. Finally, these regression coefficients are used to calculate the downscaled LST using Sentinel-2 NDVI, NDBI, and NDWI spectral indices in a 10 m resolution. Regression residuals are resampled using bicubic interpolation, filtered using Gaussian convolution and added back to the downscaled LST. Also, Landsat 8/9 and Sentinel-2 natural color images (RGB) are generated to compare with the final LST layers.
-</b>For more detailed information see [the published article in Remote Sensing journal](https://www.mdpi.com/journal/remotesensing).
+For an AOI and a summer multi-year window such as `2021-2025`, the pipeline:
+
+1. Reads the AOI from `data/aoi/<name>.gpkg`
+2. Searches Landsat 8/9 `L2SP` scenes with valid `ST_B10`
+3. Searches Sentinel-2 scenes close in time
+4. Pairs Landsat and Sentinel-2 scenes automatically
+5. Builds a downscaled LST image for each valid pair
+6. Aggregates all pair outputs into one final raster
+7. Downloads the final GeoTIFF locally to `outputs/<name>`
+
+Main outputs:
+
+- `lst_mean_06-07-08_2021_2025_10m.tif`
+- `landsat_lst_mean_06-07-08_2021_2025_30m.tif`
+- `scene_pairs.json`
+- `pipeline_outputs.json`
+
+## Important methodological note
+
+This workflow uses `ST_B10` directly from Landsat Collection 2 Level-2.
+
+That means:
+
+- the Landsat base LST is not recomputed from raw thermal radiance in this repo
+- the final `10 m` output is a downscaled product, not a native thermal measurement at `10 m`
+- the final product is suitable for urban heat island mapping as an operational surface temperature layer, as long as this is stated clearly in the methodology
+
+## Repository structure
+
+```text
+config/
+data/
+  aoi/
+javascript_codes/
+lst_downscaling/
+outputs/
+tests/
+```
+
+## Installation
+
+```bash
+python -m pip install -r requirements.txt
+python -m pip install -e .
+```
+
+## Earth Engine authentication
+
+Before running the pipeline, authenticate Earth Engine:
+
+```bash
+earthengine authenticate
+```
+
+If your account requires an explicit Google Cloud project, pass it at runtime with `--ee-project`.
+
+## Usage
+
+Put the AOI in `data/aoi`, for example:
+
+```text
+data/aoi/aranjuez.gpkg
+```
+
+Run:
+
+```bash
+python -m lst_downscaling ^
+  --aoi data/aoi/aranjuez.gpkg ^
+  --output-dir outputs/aranjuez ^
+  --start-year 2021 ^
+  --end-year 2025 ^
+  --months 6,7,8 ^
+  --max-cloud-cover 20 ^
+  --max-pair-gap-days 5 ^
+  --scale-m 10
+```
+
+On PowerShell you can also run it in one line:
+
+```powershell
+python -m lst_downscaling --aoi data/aoi/aranjuez.gpkg --output-dir outputs/aranjuez --start-year 2021 --end-year 2025 --months 6,7,8 --max-cloud-cover 20 --max-pair-gap-days 5 --scale-m 10
+```
+
+Useful options:
+
+- `--ee-project <project-id>` to initialize Earth Engine with an explicit project
+- `--max-scenes 3` to do a short test run
+
+## Notes on scene selection
+
+The pipeline currently:
+
+- filters Landsat by `CLOUD_COVER < threshold`
+- requires `PROCESSING_LEVEL = L2SP`, so `ST_B10` is actually available
+- filters Sentinel-2 by `CLOUDY_PIXEL_PERCENTAGE < threshold`
+- pairs each Landsat scene with the nearest Sentinel-2 acquisition date within the allowed day gap
+- mosaics all Sentinel-2 granules found for the selected day over the AOI
+
+## Notes on the downscaling model
+
+For each valid pair:
+
+- Landsat predictors:
+  - `NDVI = (SR_B5 - SR_B4) / (SR_B5 + SR_B4)`
+  - `NDWI = (SR_B3 - SR_B5) / (SR_B3 + SR_B5)`
+  - `NDBI = (SR_B6 - SR_B5) / (SR_B6 + SR_B5)`
+- Sentinel-2 predictors:
+  - `NDVI = (B8 - B4) / (B8 + B4)`
+  - `NDWI = (B3 - B11) / (B3 + B11)`
+  - `NDBI = (B11 - B8) / (B11 + B8)`
+- Landsat `ST_B10` is scaled to degrees Celsius
+- a multiple linear regression is fitted at Landsat scale
+- the regression is applied at Sentinel scale
+- smoothed residuals are added back to the final image
+
+## Tests
+
+```bash
+python -m pytest -q
+```
+
+## Current limitations
+
+- I have not run a full real AOI export from this environment because Earth Engine is not authenticated here
+- the pipeline uses scene-level cloud filters plus pixel masks, but it does not yet score pairs by more advanced coverage metrics over the AOI
+- the final raster is generated from the valid paired scenes found by Earth Engine at runtime, so results depend on the available archive and masks
+
+## Original JavaScript app
+
+The original interactive script is still available in:
+
+- `javascript_codes/LST-downscaling_GEE_APP.js`
+
+That file remains useful as:
+
+- methodological reference
+- quick visual prototyping in the GEE Code Editor
+- comparison point against the new AOI pipeline

@@ -1,0 +1,7 @@
+earthengine-api>=1.6.12
+geedim>=2.0.0
+geemap>=0.37.2
+pyogrio>=0.11
+pyproj>=3.7
+rasterio>=1.4
+shapely>=2.0

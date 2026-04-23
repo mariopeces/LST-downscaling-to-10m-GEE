@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lst-downscaling-gee"
+version = "0.1.0"
+description = "AOI-driven Landsat ST_B10 + Sentinel-2 downscaling pipeline in Google Earth Engine"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+  "earthengine-api>=1.6.12",
+  "geedim>=2.0.0",
+  "geemap>=0.37.2",
+  "pyogrio>=0.11",
+  "pyproj>=3.7",
+  "rasterio>=1.4",
+  "shapely>=2.0",
+]
+
+[project.scripts]
+lst-downscaling = "lst_downscaling.cli:main"
+
+[tool.setuptools]
+packages = ["lst_downscaling"]
