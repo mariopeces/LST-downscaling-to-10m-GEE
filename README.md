@@ -31,6 +31,9 @@ Main outputs:
 
 - `lst_mean_06-07-08_2021_2025_10m.tif`
 - `landsat_lst_mean_06-07-08_2021_2025_30m.tif`
+- `sentinel_ndvi_mean_06-07-08_2021_2025_10m.tif`
+- `sentinel_ndwi_mean_06-07-08_2021_2025_10m.tif`
+- `sentinel_ndbi_mean_06-07-08_2021_2025_10m.tif`
 - `scene_pairs.json`
 - `pipeline_outputs.json`
 

@@ -8,6 +8,8 @@ from typing import Any
 
 import ee
 import geemap
+import numpy as np
+import rasterio
 from pyproj import CRS
 
 from .aoi import AOI, read_aoi
@@ -322,13 +324,27 @@ def _s2_indices(s2_image: ee.Image) -> dict[str, ee.Image]:
     nir = s2_image.select("B8")
     red = s2_image.select("B4")
     green = s2_image.select("B3")
-    swir = s2_image.select("B11").resample("bilinear")
+    swir = s2_image.select("B11")
 
     return {
         "ndvi": nir.subtract(red).divide(nir.add(red)).rename("S2_NDVI"),
         "ndwi": green.subtract(swir).divide(green.add(swir)).rename("S2_NDWI"),
         "ndbi": swir.subtract(nir).divide(swir.add(nir)).rename("S2_NDBI"),
     }
+
+
+def _fix_downloaded_raster_nodata(output_path: Path, *, nodata_value: float = -9999.0) -> None:
+    with rasterio.open(output_path) as src:
+        data = src.read()
+        profile = src.profile.copy()
+
+    invalid = ~np.isfinite(data)
+    if invalid.any():
+        data = np.where(invalid, nodata_value, data)
+
+    profile.update(nodata=nodata_value, dtype="float32")
+    with rasterio.open(output_path, "w", **profile) as dst:
+        dst.write(data.astype(np.float32))
 
 
 def _landsat_indices(landsat_image: ee.Image) -> dict[str, ee.Image]:
@@ -344,7 +360,7 @@ def build_downscaled_pair_image(
     pair: ScenePair,
     aoi_geometry: ee.Geometry,
     mode: str,
-) -> tuple[ee.Image, ee.Image, dict[str, Any]]:
+) -> tuple[ee.Image, ee.Image, ee.Image, dict[str, Any]]:
     landsat_image = _prepare_landsat_image(_get_landsat_image(pair), mode=mode).clip(aoi_geometry)
     sentinel_image = _get_sentinel_image(pair, aoi_geometry, mode=mode)
 
@@ -432,7 +448,16 @@ def build_downscaled_pair_image(
         "residual_rmse_c": float(residual_rmse) ** 0.5 if residual_rmse is not None else None,
     }
     image = downscaled.set(metadata)
-    return image, landsat_lst.toFloat().clip(aoi_geometry).set(metadata), metadata
+    predictor_stack = (
+        sentinel_indices["ndvi"]
+        .addBands(sentinel_indices["ndwi"])
+        .addBands(sentinel_indices["ndbi"])
+        .rename(["S2_NDVI", "S2_NDWI", "S2_NDBI"])
+        .toFloat()
+        .clip(aoi_geometry)
+        .set(metadata)
+    )
+    return image, landsat_lst.toFloat().clip(aoi_geometry).set(metadata), predictor_stack, metadata
 
 
 def _download_image(
@@ -455,6 +480,7 @@ def _download_image(
         unmask_value=-9999.0,
         overwrite=True,
     )
+    _fix_downloaded_raster_nodata(output_path)
     return output_path
 
 
@@ -495,11 +521,12 @@ def run_pipeline(
 
     pair_images: list[ee.Image] = []
     landsat_lst_images: list[ee.Image] = []
+    predictor_images: list[ee.Image] = []
     pair_metadata: list[dict[str, Any]] = []
     skipped_pairs: list[dict[str, str]] = []
     for pair in scene_pairs:
         try:
-            image, landsat_lst_image, metadata = build_downscaled_pair_image(
+            image, landsat_lst_image, predictor_image, metadata = build_downscaled_pair_image(
                 pair=pair,
                 aoi_geometry=aoi_geometry,
                 mode=mode,
@@ -517,9 +544,10 @@ def run_pipeline(
 
         pair_images.append(image)
         landsat_lst_images.append(landsat_lst_image)
+        predictor_images.append(predictor_image)
         pair_metadata.append(metadata)
 
-    if not pair_images or not landsat_lst_images:
+    if not pair_images or not landsat_lst_images or not predictor_images:
         raise RuntimeError(
             "No se ha podido generar ninguna imagen downscaled valida tras filtrar escenas problematicas."
         )
@@ -528,12 +556,16 @@ def run_pipeline(
     aggregated_landsat_lst = (
         ee.ImageCollection(landsat_lst_images).mean().rename("L8_LST_MEAN").clip(aoi_geometry).toFloat()
     )
+    aggregated_predictors = ee.ImageCollection(predictor_images).mean().clip(aoi_geometry).toFloat()
 
     months_label = "-".join(f"{month:02d}" for month in months)
     aggregated_path = output_path / f"lst_mean_{months_label}_{start_year}_{end_year}_{int(scale_m)}m.tif"
     aggregated_landsat_path = (
         output_path / f"landsat_lst_mean_{months_label}_{start_year}_{end_year}_30m.tif"
     )
+    aggregated_ndvi_path = output_path / f"sentinel_ndvi_mean_{months_label}_{start_year}_{end_year}_10m.tif"
+    aggregated_ndwi_path = output_path / f"sentinel_ndwi_mean_{months_label}_{start_year}_{end_year}_10m.tif"
+    aggregated_ndbi_path = output_path / f"sentinel_ndbi_mean_{months_label}_{start_year}_{end_year}_10m.tif"
     _download_image(
         image=aggregated,
         output_path=aggregated_path,
@@ -547,6 +579,27 @@ def run_pipeline(
         aoi_geometry=aoi_geometry,
         crs=output_crs,
         scale_m=30.0,
+    )
+    _download_image(
+        image=aggregated_predictors.select("S2_NDVI"),
+        output_path=aggregated_ndvi_path,
+        aoi_geometry=aoi_geometry,
+        crs=output_crs,
+        scale_m=10.0,
+    )
+    _download_image(
+        image=aggregated_predictors.select("S2_NDWI"),
+        output_path=aggregated_ndwi_path,
+        aoi_geometry=aoi_geometry,
+        crs=output_crs,
+        scale_m=10.0,
+    )
+    _download_image(
+        image=aggregated_predictors.select("S2_NDBI"),
+        output_path=aggregated_ndbi_path,
+        aoi_geometry=aoi_geometry,
+        crs=output_crs,
+        scale_m=10.0,
     )
 
     scene_pairs_path = output_path / "scene_pairs.json"
@@ -562,6 +615,9 @@ def run_pipeline(
         "skipped_scene_pairs": str(skipped_pairs_path.resolve()),
         "aggregated_lst": str(aggregated_path.resolve()),
         "aggregated_landsat_lst": str(aggregated_landsat_path.resolve()),
+        "aggregated_ndvi": str(aggregated_ndvi_path.resolve()),
+        "aggregated_ndwi": str(aggregated_ndwi_path.resolve()),
+        "aggregated_ndbi": str(aggregated_ndbi_path.resolve()),
         "output_crs": output_crs.to_string(),
         "scale_m": scale_m,
         "mode": mode,
