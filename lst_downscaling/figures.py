@@ -231,6 +231,7 @@ def make_predictor_panel(
     ndwi_tif: str | Path,
     ndbi_tif: str | Path,
     output_path: str | Path,
+    bbox: tuple[float, float, float, float] | None = None,
 ) -> Path:
     items = [
         ("NDVI", Path(ndvi_tif), NDVI_CMAP, "Vegetación"),
@@ -239,7 +240,7 @@ def make_predictor_panel(
     ]
     fig, axes = plt.subplots(1, 3, figsize=(13, 4.4), dpi=170)
     for ax, (label, path, cmap, subtitle) in zip(axes, items):
-        data, transform, _, _ = _read_window(path, None)
+        data, transform, _, _ = _read_window(path, bbox)
         vals = data[np.isfinite(data)]
         vmin = float(np.nanpercentile(vals, 2))
         vmax = float(np.nanpercentile(vals, 98))

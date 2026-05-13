@@ -210,7 +210,7 @@ def build_heat_report(
     make_lst_render(lst_tif=lst_tif, output_path=render_full, title=f"LST media estival - {municipality_label}")
     make_lst_render(lst_tif=lst_tif, output_path=render_detail, title=f"Centro urbano - {municipality_label}", bbox=urban_bbox)
     make_lst_histogram(lst_tif=lst_tif, output_path=hist)
-    make_predictor_panel(ndvi_tif=ndvi_tif, ndwi_tif=ndwi_tif, ndbi_tif=ndbi_tif, output_path=predictors)
+    make_predictor_panel(ndvi_tif=ndvi_tif, ndwi_tif=ndwi_tif, ndbi_tif=ndbi_tif, output_path=predictors, bbox=urban_bbox)
     make_scene_timeline(scene_pairs_json=pdir / "scene_pairs.json", output_path=timeline)
 
     l8_stats = read_raster_stats(landsat_tif)

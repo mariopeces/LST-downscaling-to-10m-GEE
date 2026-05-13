@@ -29,6 +29,7 @@ from .inventory_heat import (
     priority_trees,
     sample_raster,
 )
+from .report import _urban_bbox
 from .report import _STYLE_BLOCK, _spanish_date
 
 
@@ -327,6 +328,18 @@ def build_heat_inventory_report(
     summary = overall_summary(sampled)
     priorities = priority_trees(sampled, top_n=80)
 
+    map_bbox = None
+    if municipality_label.strip().lower() == "aranjuez":
+        import rasterio
+
+        with rasterio.open(lst_tif) as src:
+            map_bbox = _urban_bbox(
+                municipality_label=municipality_label,
+                crs=src.crs.to_string() if src.crs else "",
+                fallback_bounds=(src.bounds.left, src.bounds.bottom, src.bounds.right, src.bounds.top),
+                span_m=6500.0,
+            )
+
     hist_png = figures / "heat_inventory_histogram.png"
     bands_png = figures / "heat_inventory_bands.png"
     species_stack_png = figures / "heat_inventory_species_stack.png"
@@ -338,8 +351,8 @@ def build_heat_inventory_report(
 
     f1_histogram(values=sampled["lst_c"].to_numpy(), thresholds=thresholds, output_path=hist_png)
     f2_heat_bands(df=sampled, output_path=bands_png)
-    f6_inventory_map(df=sampled, lst_tif=lst_tif, output_path=map_png, title=f"Inventario sobre isla de calor - {municipality_label}")
-    f6_inventory_map(df=priorities, lst_tif=lst_tif, output_path=priority_map_png, title=f"Árboles prioritarios - {municipality_label}", priority_only=True)
+    f6_inventory_map(df=sampled, lst_tif=lst_tif, output_path=map_png, title=f"Inventario sobre isla de calor - {municipality_label}", bbox=map_bbox)
+    f6_inventory_map(df=priorities, lst_tif=lst_tif, output_path=priority_map_png, title=f"Árboles prioritarios - {municipality_label}", priority_only=True, bbox=map_bbox)
 
     figures_html: dict[str, str] = {}
     species_stats = grouped_stats(sampled, "species", min_count=30, top_n=15)

@@ -197,11 +197,19 @@ def _draw_scale_bar_and_north(ax) -> None:
     n_txt.set_path_effects(_TEXT_OUTLINE)
 
 
-def f6_inventory_map(*, df, lst_tif: str | Path, output_path: str | Path, title: str, priority_only: bool = False) -> Path:
+def f6_inventory_map(
+    *,
+    df,
+    lst_tif: str | Path,
+    output_path: str | Path,
+    title: str,
+    priority_only: bool = False,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> Path:
     points = df.dropna(subset=["lst_c"]).copy()
     if priority_only:
         points = points.sort_values("lst_c", ascending=False).head(min(350, len(points)))
-    data, transform, nodata = _read_raster_window(Path(lst_tif), None)
+    data, transform, nodata = _read_raster_window(Path(lst_tif), bbox)
     arr = data.astype("float32")
     if nodata is not None:
         arr = np.where(np.isclose(arr, nodata), np.nan, arr)
