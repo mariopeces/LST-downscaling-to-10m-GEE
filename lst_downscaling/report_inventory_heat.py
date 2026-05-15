@@ -333,11 +333,19 @@ def build_heat_inventory_report(
         import rasterio
 
         with rasterio.open(lst_tif) as src:
-            map_bbox = _urban_bbox(
+            base_bbox = _urban_bbox(
                 municipality_label=municipality_label,
                 crs=src.crs.to_string() if src.crs else "",
                 fallback_bounds=(src.bounds.left, src.bounds.bottom, src.bounds.right, src.bounds.top),
                 span_m=6500.0,
+            )
+            left, bottom, right, top = base_bbox
+            full = src.bounds
+            map_bbox = (
+                left,
+                max(full.bottom, bottom - 500.0),
+                right,
+                min(full.top, top + 2200.0),
             )
 
     hist_png = figures / "heat_inventory_histogram.png"
